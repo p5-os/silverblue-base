@@ -60,7 +60,7 @@ jobs:
 
       - name: Build base image
         id: build-image
-        use: redhat-actions/buildah-build@v2
+        uses: redhat-actions/buildah-build@v2
         with:
           image: ${{ env.IMAGE }}
           tags: |
