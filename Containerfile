@@ -1,7 +1,7 @@
 ARG FEDORA_VERSION=37
 
 # See https://pagure.io/releng/issue/11047 for final location
-FROM ghcr.io/cgwalters/fedora-silverblue:${FEDORA_VERSION} AS drivers-none
+FROM ghcr.io/cgwalters/fedora-silverblue:${FEDORA_VERSION} AS driver-none
 
 COPY etc /etc
 
@@ -36,7 +36,8 @@ RUN rpm-ostree cleanup -m && \
     rm -rf /var/* && \
     ostree container commit
 
-FROM drivers-none AS drivers-nvidia
+
+FROM driver-none AS driver-nvidia
 
 RUN rpm-ostree install \
       akmod-nvidia \

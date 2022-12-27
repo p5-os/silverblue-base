@@ -16,12 +16,12 @@ env:
   IMAGE: silverblue
 
 jobs:
-  build-and-push:
+  build-and-push-base:
     runs-on: ubuntu-latest
     strategy:
       matrix:
         fedora-version: [ 37 ]
-        drivers: [none, nvidia]
+        drivers: [ 'none', 'nvidia' ]
         include:
           - fedora-version: 37
             is-latest: true
@@ -34,26 +34,28 @@ jobs:
         id: generate-tags
         shell: bash
         run: |
-          tags=()
-
+          default_tags=()
           base_tag="${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ matrix.fedora-version }}"
 
+          if [[ "${{ matrix.is-latest }}" == "true" ]]; then
+            default_tags+=("${base_tag}-latest")
+          fi
+          if [[ "${{ matrix.is-stable }}" == "true" ]]; then
+            default_tags+=("${base_tag}-stable")
+          fi
+          default_tags+=("${base_tag}-$(date +%Y%m%d)")
+          default_tags+=("${base_tag}-$(git rev-parse --short HEAD)")
+
           if [[ "${{ matrix.drivers }}" != "none" ]]; then
-            base_tag="${base_tag}-${{ matrix.drivers }}"
+            driver_tag="${{ matrix.drivers }}"
+            driver_tags=()
+            for tag in "${default_tags[@]}"; do
+              driver_tags+=("${tag}-${driver_tag}")
+            done
+            default_tags=("${driver_tags[@]}")
           fi
 
-          if [[ "${{ matrix.is-stable }}" ]]; then
-            tags+=("${base_tag}-stable")
-          fi
-
-          if [[ "${{ matrix.is-latest }}" ]]; then
-            tags+=("${base_tag}-latest")
-          fi
-
-          tags+=("${base_tag}-${GITHUB_SHA::8}")
-
-          echo "tags=${tags[*]}" >> $GITHUB_ENV
-          echo "Generated tags: ${tags[*]}"
+          echo "default_tags=${default_tags[*]}" >> $GITHUB_OUTPUT
 
       - name: Login to GitHub Container Registry
         if: github.ref == 'refs/heads/main'
@@ -64,17 +66,18 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # Rewrite the above using Docker instead of Buildah
-      - name: Build image
-        id: build-and-push
-        uses: docker/build-push-action@v2
+      - name: Build base image
+        uses: redhat-actions/buildah-build@v2
         with:
-          context: .
-          target: drivers-${{ matrix.drivers }}
-          file: ./Containerfile
-          push: ${{ github.ref == 'refs/heads/main' }}
-          tags: ${{ join(steps.generate-tags.outputs.tags, ',') }}
-          build-args: |
+          tags: ${{ steps.generate-tags.outputs.default_tags }}
+          dockerfiles: |
+            ./Containerfile
+          build_args: |
             FEDORA_VERSION=${{ matrix.fedora-version }}
+          context: .
+          push: ${{ github.ref == 'refs/heads/main' }}
+          extra-args: |
+            --target=driver-${{ matrix.drivers }}
 
       - name: Set up Cosign
         if: github.ref == 'refs/heads/main'
