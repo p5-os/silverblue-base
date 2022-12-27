@@ -66,8 +66,8 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # Rewrite the above using Docker instead of Buildah
-      - name: Build base image
-        id: build-image
+      - name: Build image
+        id: build-and-push
         uses: docker/build-push-action@v2
         with:
           context: .
@@ -96,10 +96,10 @@ jobs:
           cosign sign -key .certs/cosign.key ${{ env.REGISTRY }}/${{ env.IMAGE }}:{$DIGEST}
         env:
           COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
-          DIGEST: ${{ steps.push.outputs.digest }}
+          DIGEST: ${{ steps.build-and-push.outputs.digest }}
 
       - name: Verify image
         if: github.ref == 'refs/heads/main'
         shell: bash
         run: |
-          cosign verify -key .certs/cosign.pub ${{ steps.push-image.outputs.registry-paths }}
+          cosign verify -key .certs/cosign.pub ${{ env.REGISTRY }}/${{ env.IMAGE }}
