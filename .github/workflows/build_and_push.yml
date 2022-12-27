@@ -95,7 +95,7 @@ jobs:
         if: github.ref == 'refs/heads/main'
         shell: bash
         run: |
-          cosign sign --key .certs/cosign.key ${{ env.REGISTRY }}/${{ env.IMAGE }}@{$DIGEST}
+          cosign sign --key .certs/cosign.key ${{ env.REGISTRY }}/${{ env.IMAGE }}@$DIGEST
         env:
           COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
           DIGEST: ${{ steps.push-image.outputs.digest }}
