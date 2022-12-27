@@ -72,8 +72,7 @@ jobs:
           target: base-${{ matrix.drivers }}
           file: ./Containerfile
           push: ${{ github.ref == 'refs/heads/main' }}
-          tags: |
-            ${{ steps.generate-tags.outputs.tags }}
+          tags: ${{ steps.generate-tags.outputs.tags }}
           build-args: |
             FEDORA_VERSION=${{ matrix.fedora-version }}
 
