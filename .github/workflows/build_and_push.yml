@@ -51,6 +51,7 @@ jobs:
           tags+=("${base_tag}-$(git rev-parse --short HEAD)")
 
           echo "tags=${tags[*]}" >> $GITHUB_OUTPUT
+          generated_tags="${tags[*]}"
 
       - name: Login to GitHub Container Registry
         if: github.ref == 'refs/heads/main'
