@@ -1,4 +1,4 @@
-name: build and push
+name: Build and Push
 
 on:
   push:
@@ -16,7 +16,7 @@ env:
   IMAGE: silverblue-base
 
 jobs:
-  build-and-push-base:
+  build-and-push:
     runs-on: ubuntu-latest
     strategy:
       matrix:
