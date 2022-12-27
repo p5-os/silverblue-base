@@ -35,32 +35,23 @@ jobs:
         shell: bash
         run: |
           tags=()
-
           base_tag="${{ matrix.fedora-version }}"
-          if [[ "${{ matrix.drivers }}" != "none" ]]; then
-            base_tag="${base_tag}-${{ matrix.drivers }}"
-          fi
-
           if [[ "${{ matrix.is-latest }}" == "true" ]]; then
-            tags+=("${base_tag}-latest")
+            tags+=("latest")
           fi
           if [[ "${{ matrix.is-stable }}" == "true" ]]; then
-            tags+=("${base_tag}-stable")
+            tags+=("stable")
           fi
           tags+=("${base_tag}-$(date +%Y%m%d)")
           tags+=("${base_tag}-$(git rev-parse --short HEAD)")
-
+          # For nvidia drivers, append each tag with the driver name
+          if [[ "${{ matrix.drivers }}" != "none" ]]; then
+            for i in "${!tags[@]}"; do
+            tags[$i]="${tags[$i]}-${{ matrix.drivers }}"
+            done
+          fi
           echo "tags=${tags[*]}" >> $GITHUB_OUTPUT
           generated_tags="${tags[*]}"
-
-      - name: Login to GitHub Container Registry
-        if: github.ref == 'refs/heads/main'
-        uses: docker/login-action@v2
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Build image
         uses: redhat-actions/buildah-build@v2
         with:
@@ -70,8 +61,16 @@ jobs:
           build_args: |
             FEDORA_VERSION=${{ matrix.fedora-version }}
           context: .
+          oci: true
           extra-args: |
             --target=driver-${{ matrix.drivers }}
+      - name: Login to GitHub Container Registry
+        if: github.ref == 'refs/heads/main'
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push image
         if: github.ref == 'refs/heads/main'
@@ -91,8 +90,6 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: |
           echo "${{ secrets.COSIGN_PRIVATE_KEY }}" > .certs/cosign.key
-          chmod 600 cosign.key
-
       - name: Sign image
         if: github.ref == 'refs/heads/main'
         shell: bash

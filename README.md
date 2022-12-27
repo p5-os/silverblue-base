@@ -14,10 +14,8 @@ This is an experimental feature. It is not recommended to use this image in prod
 The `latest` tag will always point to the most recent build.
 The `stable` tag will always point to the most recent stable build.
 
-:construction:
 Each tag will have a sister tag with the `-nvidia` suffix. This tag is the same as the base, but with the NVIDIA drivers
 preinstalled.
-:construction:
 
 ## Features
 
