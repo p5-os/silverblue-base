@@ -34,28 +34,23 @@ jobs:
         id: generate-tags
         shell: bash
         run: |
-          default_tags=()
-          base_tag="${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ matrix.fedora-version }}"
+          tags=()
+
+          base_tag="${{ matrix.fedora-version }}"
+          if [[ "${{ matrix.drivers }}" != "none" ]]; then
+            base_tag="${base_tag}-${{ matrix.drivers }}"
+          fi
 
           if [[ "${{ matrix.is-latest }}" == "true" ]]; then
-            default_tags+=("${base_tag}-latest")
+            tags+=("${base_tag}-latest")
           fi
           if [[ "${{ matrix.is-stable }}" == "true" ]]; then
-            default_tags+=("${base_tag}-stable")
+            tags+=("${base_tag}-stable")
           fi
-          default_tags+=("${base_tag}-$(date +%Y%m%d)")
-          default_tags+=("${base_tag}-$(git rev-parse --short HEAD)")
+          tags+=("${base_tag}-$(date +%Y%m%d)")
+          tags+=("${base_tag}-$(git rev-parse --short HEAD)")
 
-          if [[ "${{ matrix.drivers }}" != "none" ]]; then
-            driver_tag="${{ matrix.drivers }}"
-            driver_tags=()
-            for tag in "${default_tags[@]}"; do
-              driver_tags+=("${tag}-${driver_tag}")
-            done
-            default_tags=("${driver_tags[@]}")
-          fi
-
-          echo "default_tags=${default_tags[*]}" >> $GITHUB_OUTPUT
+          echo "tags=${tags[*]}" >> $GITHUB_OUTPUT
 
       - name: Login to GitHub Container Registry
         if: github.ref == 'refs/heads/main'
@@ -65,10 +60,10 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Rewrite the above using Docker instead of Buildah
-      - name: Build base image
+      - name: Build image
         uses: redhat-actions/buildah-build@v2
         with:
+          image: ${{ env.IMAGE }}
           tags: ${{ steps.generate-tags.outputs.default_tags }}
           dockerfiles: |
             ./Containerfile
@@ -78,6 +73,16 @@ jobs:
           push: ${{ github.ref == 'refs/heads/main' }}
           extra-args: |
             --target=driver-${{ matrix.drivers }}
+
+      - name: Push image
+        if: github.ref == 'refs/heads/main'
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ env.IMAGE }}
+          tags: ${{ steps.generate-tags.outputs.default_tags }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Cosign
         if: github.ref == 'refs/heads/main'
