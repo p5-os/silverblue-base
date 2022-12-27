@@ -73,6 +73,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push image
+        id: push-image
         if: github.ref == 'refs/heads/main'
         uses: redhat-actions/push-to-registry@v2
         with:
@@ -94,10 +95,10 @@ jobs:
         if: github.ref == 'refs/heads/main'
         shell: bash
         run: |
-          cosign sign -key .certs/cosign.key ${{ env.REGISTRY }}/${{ env.IMAGE }}:{$DIGEST}
+          cosign sign --key .certs/cosign.key ${{ env.REGISTRY }}/${{ env.IMAGE }}:{$DIGEST}
         env:
           COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
-          DIGEST: ${{ steps.build-and-push.outputs.digest }}
+          DIGEST: ${{ steps.push-image.outputs.digest }}
 
       - name: Verify image
         if: github.ref == 'refs/heads/main'
