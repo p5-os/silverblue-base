@@ -69,7 +69,7 @@ jobs:
         uses: docker/build-push-action@v2
         with:
           context: .
-          target: base-${{ matrix.drivers }}
+          target: drivers-${{ matrix.drivers }}
           file: ./Containerfile
           push: ${{ github.ref == 'refs/heads/main' }}
           tags: ${{ join(steps.generate-tags.outputs.tags, ',') }}
