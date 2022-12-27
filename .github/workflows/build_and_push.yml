@@ -52,8 +52,8 @@ jobs:
 
           tags+=("${base_tag}-${GITHUB_SHA::8}")
 
+          echo "tags=${tags[*]}" >> $GITHUB_ENV
           echo "Generated tags: ${tags[*]}"
-          echo "tags=${tags[*]}" >> $GITHUB_OUTPUT
 
       - name: Login to GitHub Container Registry
         if: github.ref == 'refs/heads/main'
@@ -72,7 +72,7 @@ jobs:
           target: base-${{ matrix.drivers }}
           file: ./Containerfile
           push: ${{ github.ref == 'refs/heads/main' }}
-          tags: ${{ steps.generate-tags.outputs.tags }}
+          tags: ${{ join(steps.generate-tags.outputs.tags, ',') }}
           build-args: |
             FEDORA_VERSION=${{ matrix.fedora-version }}
 
