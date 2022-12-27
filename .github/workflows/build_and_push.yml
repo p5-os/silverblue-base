@@ -1,0 +1,109 @@
+name: Build and Push
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  schedule:
+    - cron: '0 0 * * *' # daily at midnight
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io/${{ github.repository_owner }}
+  IMAGE: silverblue-base
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        fedora-version: [ 37 ]
+        drivers: [ 'none', 'nvidia' ]
+        include:
+          - fedora-version: 37
+            is-latest: true
+            is-stable: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Generate tags
+        id: generate-tags
+        shell: bash
+        run: |
+          tags=()
+
+          base_tag="${{ matrix.fedora-version }}"
+          if [[ "${{ matrix.drivers }}" != "none" ]]; then
+            base_tag="${base_tag}-${{ matrix.drivers }}"
+          fi
+
+          if [[ "${{ matrix.is-latest }}" == "true" ]]; then
+            tags+=("${base_tag}-latest")
+          fi
+          if [[ "${{ matrix.is-stable }}" == "true" ]]; then
+            tags+=("${base_tag}-stable")
+          fi
+          tags+=("${base_tag}-$(date +%Y%m%d)")
+          tags+=("${base_tag}-$(git rev-parse --short HEAD)")
+
+          echo "tags=${tags[*]}" >> $GITHUB_OUTPUT
+          generated_tags="${tags[*]}"
+
+      - name: Login to GitHub Container Registry
+        if: github.ref == 'refs/heads/main'
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build image
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: ${{ env.IMAGE }}
+          tags: ${{ steps.generate-tags.outputs.tags }}
+          dockerfiles: ./Containerfile
+          build_args: |
+            FEDORA_VERSION=${{ matrix.fedora-version }}
+          context: .
+          extra-args: |
+            --target=driver-${{ matrix.drivers }}
+
+      - name: Push image
+        if: github.ref == 'refs/heads/main'
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ env.IMAGE }}
+          tags: ${{ steps.generate-tags.outputs.tags }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Cosign
+        if: github.ref == 'refs/heads/main'
+        uses: sigstore/cosign-installer@v2
+
+      - name: Write cosign key
+        if: github.ref == 'refs/heads/main'
+        run: |
+          echo "${{ secrets.COSIGN_PRIVATE_KEY }}" > .certs/cosign.key
+          chmod 600 cosign.key
+
+      - name: Sign image
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          cosign sign -key .certs/cosign.key ${{ env.REGISTRY }}/${{ env.IMAGE }}:{$DIGEST}
+        env:
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+          DIGEST: ${{ steps.build-and-push.outputs.digest }}
+
+      - name: Verify image
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          cosign verify -key .certs/cosign.pub ${{ env.REGISTRY }}/${{ env.IMAGE }}
