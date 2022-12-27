@@ -36,23 +36,21 @@ jobs:
         run: |
           tags=()
 
-          base_tag="${IMAGE}:${FEDORA_VERSION}"
+          base_tag="${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ matrix.fedora-version }}"
 
-          if [[ "${DRIVER_TYPE}" != "none" ]]; then
-            base_tag="${base_tag}-${DRIVER_TYPE}"
+          if [[ "${{ matrix.drivers }}" != "none" ]]; then
+            base_tag="${base_tag}-${{ matrix.drivers }}"
           fi
 
-          if [[ "${FEDORA_VERSION}" == "${FEDORA_STABLE}" ]]; then
+          if [[ "${{ matrix.is-stable }}" ]]; then
             tags+=("${base_tag}-stable")
           fi
 
-          if [[ "${FEDORA_VERSION}" == "${FEDORA_LATEST}" ]]; then
+          if [[ "${{ matrix.is-latest }}" ]]; then
             tags+=("${base_tag}-latest")
           fi
 
-          if [[ "${GIT_SHA}" != "none" ]]; then
-            tags+=("${base_tag}-${GIT_SHA}")
-          fi
+          tags+=("${base_tag}-${GITHUB_SHA::8}")
 
           echo "Generated tags: ${tags[*]}"
           echo "tags=${tags[*]}" >> $GITHUB_OUTPUT
