@@ -14,6 +14,7 @@ on:
 env:
   REGISTRY: ghcr.io/${{ github.repository_owner }}
   IMAGE: silverblue
+  REPOSITORY: p5-os/silverblue-base
 
 jobs:
   build-and-push:
@@ -29,76 +30,85 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v2
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Generate tags
         id: generate-tags
         shell: bash
         run: |
-          aliases=()
-          echo "date=$(date -u +'%Y-%m-%d')" >> $GITHUB_OUTPUT
-          echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-          echo "fedora-version=${{ matrix.fedora-version }}" >> $GITHUB_OUTPUT
-          if [[ "${{ matrix.is-latest }}" == "true" ]]; then
-            aliases+=("latest")
+          tags=()
+
+          # Add tags if this is running on the main branch
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            # Fedora version
+            tags+=("${{ matrix.fedora-version }}")
+
+            # Git SHA (short)
+            tags+=($(git rev-parse --short HEAD))
+
+            # Date (YYYYMMDDhhmm)
+            tags+=($(date -u +"%Y%m%d%H%M"))
+
+            # `latest` tag
+            if [[ "${{ matrix.is-latest }}" == "true" ]]; then
+              tags+=("latest")
+            fi
+
+            # `stable` tag
+            if [[ "${{ matrix.is-stable }}" == "true" ]]; then
+              tags+=("stable")
+            fi
           fi
-          if [[ "${{ matrix.is-stable }}" == "true" ]]; then
-            aliases+=("stable")
+
+          # Add the `pr-<number>` tag if this is a pull request and not from a fork
+          if [ "${{ github.event_name }}" == "pull_request" ] &&
+             [ "${{ github.event.pull_request.head.repo.full_name }}" == "${{ github.repository }}" ]; then
+            tags+=("pr-${{ github.event.pull_request.number }}")
           fi
-          echo "aliases=${aliases[*]}" >> $GITHUB_OUTPUT
+
+          echo "tags=${tags[*]}" >> $GITHUB_ENV
 
       - name: Build base image
         id: build-image
         uses: redhat-actions/buildah-build@v2
         with:
           image: ${{ env.IMAGE }}
-          tags: |
-            ${{ steps.generate-tags.outputs.date }}
-            ${{ steps.generate-tags.outputs.sha }}
-            ${{ steps.generate-tags.outputs.fedora-version }}
-            ${{ steps.generate-tags.outputs.aliases }}
+          tags: ${{ steps.generate-tags.outputs.tags }}
           containerfiles: |
             ./Containerfile
           build-args: |
             FEDORA_VERSION=${{ matrix.fedora-version }}
           oci: true
 
+      - name: Login to GitHub Container Registry
+        if: github.repository == env.REPOSITORY
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Push image
         id: push-image
-        if: github.ref == 'refs/heads/main'
+        if: github.repository == env.REPOSITORY
         uses: redhat-actions/push-to-registry@v2
         with:
           image: ${{ steps.build-image.outputs.image }}
           tags: ${{ steps.build-image.outputs.tags }}
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.repository_owner }}
+          username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Cosign
-        if: github.ref == 'refs/heads/main'
+        if: github.repository == env.REPOSITORY
         uses: sigstore/cosign-installer@v2
-        with:
-          cosign-release: 'v1.2.0'
 
       - name: Write cosign key
-        if: github.ref == 'refs/heads/main'
+        if: github.repository == env.REPOSITORY
         run: |
           echo "${{ secrets.COSIGN_KEY }}" > .certs/cosign.key
           chmod 600 cosign.key
 
       - name: Sign image
-        if: github.ref == 'refs/heads/main'
+        if: github.repository == env.REPOSITORY
         shell: bash
         run: |
           cosign sign -key .certs/cosign.key ${{ steps.push-image.outputs.registry-paths }}
@@ -106,7 +116,7 @@ jobs:
           COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
 
       - name: Verify image
-        if: github.ref == 'refs/heads/main'
+        if: github.repository == env.REPOSITORY
         shell: bash
         run: |
           cosign verify -key .certs/cosign.pub ${{ steps.push-image.outputs.registry-paths }}
