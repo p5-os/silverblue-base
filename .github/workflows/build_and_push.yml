@@ -64,7 +64,7 @@ jobs:
             tags+=("pr-${{ github.event.pull_request.number }}")
           fi
 
-          echo "tags=${tags[*]}" >> $GITHUB_ENV
+          echo "tags=${tags[*]}" >> $GITHUB_OUTPUT
 
       - name: Build base image
         id: build-image
